@@ -1,0 +1,5 @@
+{
+  "name": "SIMRS Agentic AI",
+  "description": "Sistem Informasi Manajemen Rumah Sakit berbasis Agentic AI yang mengoordinasikan sub-agen untuk Rekam Medis, Penjadwalan, Informasi Pasien, dan Billing.",
+  "requestFramePermissions": []
+}
