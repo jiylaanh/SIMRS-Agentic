@@ -3,14 +3,16 @@ import { initializeChat, sendMessageToGemini } from './services/geminiService';
 import { Message, AgentType } from './types';
 import AgentBadge from './components/AgentBadge';
 import Dashboard from './components/Dashboard';
-import { Send, Plus, Loader2, FileDown, ShieldCheck, Activity, FileText, LayoutDashboard, MessageSquare, User, Calendar, CreditCard } from 'lucide-react';
-
-// Use a fallback for development if env is missing (Best practice is .env, but for this demo:)
-const API_KEY = process.env.API_KEY || ''; 
+import { Send, Plus, Loader2, FileDown, ShieldCheck, Activity, FileText, LayoutDashboard, MessageSquare, User, Calendar, CreditCard, KeyRound, LogOut } from 'lucide-react';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'chat' | 'dashboard'>('chat');
   
+  // Auth / API Key State
+  const [apiKey, setApiKey] = useState('');
+  const [isConfigured, setIsConfigured] = useState(false);
+  const [tempKey, setTempKey] = useState('');
+
   // Chat State
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -19,28 +21,23 @@ const App: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Initialize Gemini on mount
-    if (API_KEY) {
-        initializeChat(API_KEY);
-    } else {
-        // Add a system message if no key
-        setMessages([{
-            id: 'system-error',
-            role: 'model',
-            text: 'API Key tidak ditemukan. Pastikan process.env.API_KEY telah diatur.',
-            timestamp: new Date(),
-            activeAgent: AgentType.COORDINATOR
-        }]);
+    // Safe check for process.env in various environments (Vite, CRA, or Browser)
+    let envKey = '';
+    try {
+        if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+            envKey = process.env.API_KEY;
+        }
+    } catch (e) {
+        // Ignore process error
     }
 
-    // Initial Welcome Message
-    setMessages([{
-      id: 'welcome',
-      role: 'model',
-      text: 'Halo! Saya adalah Koordinator Sistem Rumah Sakit (SIMRS). Saya dapat membantu Anda dengan Informasi Pasien, Penjadwalan, Rekam Medis, atau Billing. Silakan pilih menu di bawah atau ketik permintaan Anda.',
-      timestamp: new Date(),
-      activeAgent: AgentType.COORDINATOR
-    }]);
+    const localKey = localStorage.getItem('simrs_api_key');
+
+    if (envKey) {
+        handleInitialize(envKey);
+    } else if (localKey) {
+        handleInitialize(localKey);
+    }
   }, []);
 
   useEffect(() => {
@@ -48,6 +45,41 @@ const App: React.FC = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, currentView]);
+
+  const handleInitialize = (key: string) => {
+      setApiKey(key);
+      initializeChat(key);
+      setIsConfigured(true);
+
+      // Add welcome message if empty
+      setMessages(prev => {
+          if (prev.length === 0) {
+              return [{
+                id: 'welcome',
+                role: 'model',
+                text: 'Halo! Saya adalah Koordinator Sistem Rumah Sakit (SIMRS). Saya dapat membantu Anda dengan Informasi Pasien, Penjadwalan, Rekam Medis, atau Billing. Silakan pilih menu di bawah atau ketik permintaan Anda.',
+                timestamp: new Date(),
+                activeAgent: AgentType.COORDINATOR
+              }];
+          }
+          return prev;
+      });
+  };
+
+  const handleManualKeySubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (tempKey.trim().length > 10) {
+          localStorage.setItem('simrs_api_key', tempKey);
+          handleInitialize(tempKey);
+      }
+  };
+
+  const handleLogout = () => {
+      localStorage.removeItem('simrs_api_key');
+      setIsConfigured(false);
+      setApiKey('');
+      setMessages([]);
+  };
 
   const handleSendMessage = async (textOverride?: string) => {
     const textToSend = textOverride || inputText;
@@ -86,7 +118,7 @@ const App: React.FC = () => {
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: "Maaf, terjadi kesalahan saat menghubungkan ke server AI. Coba lagi nanti.",
+        text: "Maaf, terjadi kesalahan saat menghubungkan ke server AI. Periksa koneksi atau API Key Anda.",
         timestamp: new Date(),
         activeAgent: AgentType.COORDINATOR
       };
@@ -130,6 +162,56 @@ const App: React.FC = () => {
     },
   ];
 
+  // --- API KEY ENTRY SCREEN ---
+  if (!isConfigured) {
+      return (
+          <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+                  <div className="flex justify-center mb-6">
+                      <div className="bg-teal-100 p-4 rounded-full">
+                          <Activity className="w-10 h-10 text-teal-600" />
+                      </div>
+                  </div>
+                  <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">SIMRS Agentic AI</h1>
+                  <p className="text-center text-slate-500 text-sm mb-8">
+                      Sistem Manajemen Rumah Sakit Cerdas berbasis Multi-Agent. 
+                      Masukkan API Key Gemini Anda untuk memulai demo.
+                  </p>
+                  
+                  <form onSubmit={handleManualKeySubmit} className="space-y-4">
+                      <div>
+                          <label className="block text-xs font-semibold text-slate-700 uppercase mb-2">Google Gemini API Key</label>
+                          <div className="relative">
+                              <KeyRound className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                              <input 
+                                  type="password" 
+                                  value={tempKey}
+                                  onChange={(e) => setTempKey(e.target.value)}
+                                  placeholder="AIzaSy..."
+                                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none text-sm"
+                                  required
+                              />
+                          </div>
+                      </div>
+                      <button 
+                          type="submit" 
+                          className="w-full bg-slate-900 text-white py-2.5 rounded-lg font-medium hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
+                      >
+                          Masuk ke Sistem <Send className="w-4 h-4" />
+                      </button>
+                  </form>
+                  
+                  <div className="mt-6 text-center">
+                      <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-xs text-teal-600 hover:underline">
+                          Belum punya key? Dapatkan di Google AI Studio
+                      </a>
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
+  // --- MAIN APP ---
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* Sidebar - Context & Navigation */}
@@ -206,14 +288,19 @@ const App: React.FC = () => {
         </div>
         
         <div className="p-4 border-t border-slate-700">
-            <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-teal-400 to-blue-500 flex items-center justify-center font-bold text-xs">
-                    Dr
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-teal-400 to-blue-500 flex items-center justify-center font-bold text-xs">
+                        Dr
+                    </div>
+                    <div className="text-sm">
+                        <p className="font-medium">Dr. Admin</p>
+                        <p className="text-xs text-slate-400">Kepala Instalasi</p>
+                    </div>
                 </div>
-                <div className="text-sm">
-                    <p className="font-medium">Dr. Admin</p>
-                    <p className="text-xs text-slate-400">Kepala Instalasi</p>
-                </div>
+                <button onClick={handleLogout} title="Keluar / Ganti Key" className="text-slate-400 hover:text-white">
+                    <LogOut className="w-4 h-4" />
+                </button>
             </div>
         </div>
       </aside>
@@ -222,10 +309,12 @@ const App: React.FC = () => {
       <main className="flex-1 flex flex-col h-full relative">
         {/* Mobile Header */}
         <div className="md:hidden p-4 bg-slate-900 text-white flex items-center justify-between">
-            <span className="font-bold">SIMRS Agentic</span>
-            <button onClick={() => setCurrentView(currentView === 'chat' ? 'dashboard' : 'chat')} className="p-2">
-                {currentView === 'chat' ? <LayoutDashboard className="w-5 h-5"/> : <MessageSquare className="w-5 h-5"/>}
-            </button>
+            <span className="font-bold flex items-center gap-2"><Activity className="w-4 h-4 text-teal-400"/> SIMRS Agentic</span>
+            <div className="flex items-center gap-2">
+                <button onClick={() => setCurrentView(currentView === 'chat' ? 'dashboard' : 'chat')} className="p-2">
+                    {currentView === 'chat' ? <LayoutDashboard className="w-5 h-5"/> : <MessageSquare className="w-5 h-5"/>}
+                </button>
+            </div>
         </div>
 
         {currentView === 'dashboard' ? (
